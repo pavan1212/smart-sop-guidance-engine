@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -62,52 +63,60 @@
 const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
 // ── MOCK DATA ─────────────────────────────────────────────────────────────────
+// NOI SOP Structure — 4 sections matching your SharePoint
+const NOI_SOP_SECTIONS = [
+  { key: 'section1', title: 'Section 1: Is the contact notice actionable?', url: 'https://share.amazon.com/sites/amazonwatson/RA/SOPs/InfringementHub/NOI/NOI-Section1.aspx#_top', segments: ['All'] },
+  { key: 'section2', title: 'Section 2: Is the contact notice valid?',      url: 'https://share.amazon.com/sites/amazonwatson/RA/SOPs/InfringementHub/NOI/NOI-Section2.aspx',      segments: ['All'] },
+  { key: 'section3', title: 'Section 3: Is the contact notice enforceable?', url: 'https://share.amazon.com/sites/amazonwatson/RA/SOPs/InfringementHub/NOI/NOI-Section3.aspx',      segments: ['Common Law', 'OID Validation', 'TM PP/PDP', 'CFT Cases', 'NOI Appeals'] },
+  { key: 'section4', title: 'Section 4: Enforcement Details',                url: 'https://share.amazon.com/sites/amazonwatson/RA/SOPs/InfringementHub/NOI/NOI-Section4.aspx',      segments: ['Common Law', 'Design Rights', 'Patents', 'TM PP/PDP', 'CFT Cases'] },
+];
+
 const MOCK_NEWSFLASH = [
   {
     newsflashId: 'nf-001', severity: 'CRITICAL',
-    title: 'Common Law Evidence Threshold Updated — Immediate Action Required',
-    description: 'The minimum evidence threshold for Common Law cases has been raised from 2 to 3 corroborating documents, effective immediately. All active cases opened before 15 May 2026 must be reassessed against the new criteria. Failure to comply may result in case invalidation.',
-    affectedSegments: ['Common Law', 'NOI Appeals'],
+    title: 'Section 1 — Actionability Threshold Updated: New Minimum Evidence Criteria',
+    description: 'The minimum evidence threshold for determining whether a contact notice is actionable has been raised. All active cases opened before 15 May 2026 must be reassessed. Failure to comply may result in case invalidation.',
+    affectedSegments: ['All'],
     createdAt: '2026-05-15T09:00:00Z', deadline: '2026-05-16T09:00:00Z',
-    sopKey: 'common-law/Common_Law_SOP_v4.pdf',
-    beforeText: `Section 3.2 — Evidence Requirements\n\nInvestigators must obtain a minimum of TWO (2) corroborating documents before proceeding to the assessment stage. Acceptable documents include:\n- Witness statements\n- Medical records\n- Employment records\n- Photographic evidence`,
-    afterText: `Section 3.2 — Evidence Requirements\n\nInvestigators must obtain a minimum of THREE (3) corroborating documents before proceeding to the assessment stage. At least one document must be an official record (medical, employment, or legal). Acceptable documents include:\n- Witness statements (max 2 count toward minimum)\n- Medical records (official only)\n- Employment records\n- Photographic evidence\n- Legal correspondence`,
+    sopKey: 'noi-sops/NOI-Section1-Is-Contact-Notice-Actionable.md',
+    beforeText: `Section 1.3 — Evidence Requirements for Actionability\n\nA contact notice is considered actionable when the investigator can confirm:\n- Minimum TWO (2) corroborating pieces of evidence\n- At least one piece of evidence directly links the seller to the infringement\n- The notice was received within the statutory timeframe`,
+    afterText: `Section 1.3 — Evidence Requirements for Actionability\n\nA contact notice is considered actionable when the investigator can confirm:\n- Minimum THREE (3) corroborating pieces of evidence (increased from 2)\n- At least one piece of evidence must be an official record (legal, medical, or employment)\n- At least one piece of evidence directly links the seller to the infringement\n- The notice was received within the statutory timeframe\n- NEW: Digital evidence must include metadata verification`,
     acknowledgments: { 'user-1': { acknowledgedAt: '2026-05-15T10:00:00Z', email: 'alice@noi.gov', role: 'INVESTIGATOR' }, 'user-2': { acknowledgedAt: '2026-05-15T11:00:00Z', email: 'bob@noi.gov', role: 'INVESTIGATOR' }, 'user-3': { acknowledgedAt: '2026-05-15T12:00:00Z', email: 'carol@noi.gov', role: 'INVESTIGATOR' } },
     totalInvestigators: 10, ackCount: 3, ackPercent: 30,
   },
   {
     newsflashId: 'nf-002', severity: 'IMPORTANT',
-    title: 'OID Validation — Digital Submission Portal Now Mandatory',
-    description: 'All OID validation submissions must now be made through the new digital portal. Paper submissions will no longer be accepted after 1 July 2026. Investigators must register on the portal before their next OID case.',
-    affectedSegments: ['OID Validation'],
+    title: 'Section 2 — Validity Check: New Digital Submission Requirement Added',
+    description: 'Section 2 validity checks now include a mandatory digital submission verification step. Paper-only submissions will no longer satisfy the validity criteria after 1 July 2026. Investigators must update their validation workflow immediately.',
+    affectedSegments: ['All'],
     createdAt: '2026-05-12T14:00:00Z', deadline: '2026-05-14T14:00:00Z',
-    sopKey: 'oid-validation/OID_Validation_SOP_v3.pdf',
-    beforeText: `Section 5.1 — Submission Methods\n\nOID validation submissions may be made via:\n1. Paper form (Form OID-22) submitted to the regional office\n2. Email to oid-submissions@noi.gov\n3. Digital portal (optional)`,
-    afterText: `Section 5.1 — Submission Methods\n\nAll OID validation submissions MUST be made via the digital portal at portal.noi.gov/oid. Paper and email submissions are no longer accepted as of 1 July 2026.\n\nPortal registration: Contact your team lead for access credentials.`,
+    sopKey: 'noi-sops/NOI-Section2-Is-Contact-Notice-Valid.md',
+    beforeText: `Section 2.4 — Submission Format Validity\n\nA contact notice is valid if submitted via any of the following:\n1. Paper form (Form NOI-22) submitted to the regional office\n2. Email to noi-submissions@amazon.com\n3. Digital portal (optional)`,
+    afterText: `Section 2.4 — Submission Format Validity\n\nA contact notice is valid if submitted via:\n1. Digital portal at portal.amazon.com/noi (MANDATORY from 1 July 2026)\n2. Email to noi-submissions@amazon.com (accepted until 1 July 2026)\n\nPaper submissions (Form NOI-22) are no longer accepted as of 1 July 2026.\nInvestigators must verify digital submission receipt confirmation before proceeding.`,
     acknowledgments: { 'user-1': { acknowledgedAt: '2026-05-12T15:00:00Z', email: 'alice@noi.gov', role: 'INVESTIGATOR' }, 'user-2': { acknowledgedAt: '2026-05-12T16:00:00Z', email: 'bob@noi.gov', role: 'INVESTIGATOR' }, 'user-3': { acknowledgedAt: '2026-05-12T17:00:00Z', email: 'carol@noi.gov', role: 'INVESTIGATOR' }, 'user-4': { acknowledgedAt: '2026-05-12T18:00:00Z', email: 'dave@noi.gov', role: 'INVESTIGATOR' }, 'user-5': { acknowledgedAt: '2026-05-13T09:00:00Z', email: 'eve@noi.gov', role: 'INVESTIGATOR' }, 'user-6': { acknowledgedAt: '2026-05-13T10:00:00Z', email: 'frank@noi.gov', role: 'INVESTIGATOR' } },
     totalInvestigators: 10, ackCount: 6, ackPercent: 60,
   },
   {
     newsflashId: 'nf-003', severity: 'AWARENESS',
-    title: 'CFT Case Escalation Criteria Revised',
-    description: 'Updated escalation thresholds for CFT cases now include financial transactions above £50,000 as an automatic escalation trigger. Previously the threshold was £100,000. Review the Before/After comparison to understand the full scope of changes.',
-    affectedSegments: ['CFT Cases', 'NOI Complaints'],
+    title: 'Section 3 — Enforceability: CFT Escalation Thresholds Revised',
+    description: 'Section 3 enforceability criteria updated. CFT case escalation thresholds have been lowered — financial transactions above £50,000 now trigger mandatory escalation (previously £100,000). Review the Before/After diff for full details.',
+    affectedSegments: ['CFT Cases', 'NOI Appeals', 'Common Law'],
     createdAt: '2026-05-10T10:00:00Z', deadline: '2026-05-17T10:00:00Z',
-    sopKey: 'cft-cases/CFT_Cases_SOP_v3.pdf',
-    beforeText: `Section 7.4 — Escalation Triggers\n\nCFT cases must be escalated to the Senior Investigations Team when:\n- Transaction value exceeds £100,000\n- Multiple jurisdictions involved (3+)\n- Suspected terrorist financing`,
-    afterText: `Section 7.4 — Escalation Triggers\n\nCFT cases must be escalated to the Senior Investigations Team when:\n- Transaction value exceeds £50,000 (reduced from £100,000)\n- Multiple jurisdictions involved (2+, reduced from 3)\n- Suspected terrorist financing\n- Politically Exposed Person (PEP) involvement`,
+    sopKey: 'noi-sops/NOI-Section3-Is-Contact-Notice-Enforceable.md',
+    beforeText: `Section 3.7 — CFT Enforceability Escalation Triggers\n\nA CFT contact notice requires escalation to the Senior Investigations Team when:\n- Transaction value exceeds £100,000\n- Multiple jurisdictions involved (3 or more)\n- Suspected terrorist financing confirmed`,
+    afterText: `Section 3.7 — CFT Enforceability Escalation Triggers\n\nA CFT contact notice requires escalation to the Senior Investigations Team when:\n- Transaction value exceeds £50,000 (REDUCED from £100,000)\n- Multiple jurisdictions involved (2 or more, REDUCED from 3)\n- Suspected terrorist financing confirmed\n- NEW: Politically Exposed Person (PEP) involvement identified`,
     acknowledgments: { 'user-1': { acknowledgedAt: '2026-05-10T11:00:00Z', email: 'alice@noi.gov', role: 'INVESTIGATOR' }, 'user-2': { acknowledgedAt: '2026-05-10T12:00:00Z', email: 'bob@noi.gov', role: 'INVESTIGATOR' }, 'user-3': { acknowledgedAt: '2026-05-10T13:00:00Z', email: 'carol@noi.gov', role: 'INVESTIGATOR' }, 'user-4': { acknowledgedAt: '2026-05-10T14:00:00Z', email: 'dave@noi.gov', role: 'INVESTIGATOR' }, 'user-5': { acknowledgedAt: '2026-05-10T15:00:00Z', email: 'eve@noi.gov', role: 'INVESTIGATOR' }, 'user-6': { acknowledgedAt: '2026-05-10T16:00:00Z', email: 'frank@noi.gov', role: 'INVESTIGATOR' }, 'user-7': { acknowledgedAt: '2026-05-11T09:00:00Z', email: 'grace@noi.gov', role: 'INVESTIGATOR' }, 'user-8': { acknowledgedAt: '2026-05-11T10:00:00Z', email: 'henry@noi.gov', role: 'INVESTIGATOR' } },
     totalInvestigators: 10, ackCount: 8, ackPercent: 80,
   },
   {
     newsflashId: 'nf-004', severity: 'INFO',
-    title: 'TM PP/PDP — Updated Form Templates Available',
-    description: 'New standardised form templates for TM PP/PDP cases are now available in the document library. Use of the new templates is recommended but not mandatory until 1 August 2026.',
-    affectedSegments: ['TM PP/PDP'],
+    title: 'Section 4 — Enforcement Details: Updated Form Templates Available',
+    description: 'New standardised enforcement documentation templates for Section 4 are now available. Use of the new templates is recommended but not mandatory until 1 August 2026. Legacy templates remain valid in the interim.',
+    affectedSegments: ['Common Law', 'Design Rights', 'Patents', 'TM PP/PDP', 'CFT Cases'],
     createdAt: '2026-05-08T09:00:00Z', deadline: '2026-06-08T09:00:00Z',
-    sopKey: 'tm-pp-pdp/TM_PP_PDP_SOP_v2.pdf',
-    beforeText: `Section 2.1 — Form Templates\n\nInvestigators may use any approved form template from the 2024 library.`,
-    afterText: `Section 2.1 — Form Templates\n\nInvestigators should use the 2026 standardised templates available in the document library. Legacy 2024 templates remain valid until 1 August 2026.`,
+    sopKey: 'noi-sops/NOI-Section4-Enforcement-Details.md',
+    beforeText: `Section 4.1 — Enforcement Documentation\n\nInvestigators may use any approved enforcement form template from the 2024 library when documenting enforcement actions.`,
+    afterText: `Section 4.1 — Enforcement Documentation\n\nInvestigators should use the 2026 standardised enforcement templates available in the document library. Templates are available for:\n- Common Law enforcement actions\n- Design Rights enforcement actions\n- Patent enforcement actions\n- TM PP/PDP enforcement actions\n- CFT enforcement actions\n\nLegacy 2024 templates remain valid until 1 August 2026.`,
     acknowledgments: { 'user-1': { acknowledgedAt: '2026-05-08T10:00:00Z', email: 'alice@noi.gov', role: 'INVESTIGATOR' } },
     totalInvestigators: 10, ackCount: 1, ackPercent: 10,
   },
@@ -648,13 +657,13 @@ function Navbar({ activeTab, setActiveTab, newsflashItems, onAcknowledge, wsStat
 
 // ── SMART SOP SEARCH ──────────────────────────────────────────────────────────
 const sopSteps = [
-  { id: 1, text: 'Verify claimant identity using government-issued photo ID and proof of address (within 3 months).' },
-  { id: 2, text: 'Confirm case reference number matches the registered claim in the Paragon system.' },
-  { id: 3, text: 'Review submitted evidence against the updated Common Law evidence threshold (min. 3 corroborating documents).' },
-  { id: 4, text: 'Assess escalation criteria: fatality, serious injury, or systemic employer failure — escalate to Senior Investigations Team if any apply.' },
-  { id: 5, text: 'Document all findings in Paragon using the standardised annotation template and mark case status as "Under Review".' },
+  { id: 1, section: 'Section 1', text: 'Is the contact notice actionable? — Verify minimum evidence threshold (3 corroborating pieces), confirm at least one is an official record, and check the notice was received within the statutory timeframe.' },
+  { id: 2, section: 'Section 2', text: 'Is the contact notice valid? — Validate submission format (digital portal required from 1 July 2026), confirm all mandatory fields are present, and verify digital receipt confirmation.' },
+  { id: 3, section: 'Section 3', text: 'Is the contact notice enforceable? — Assess enforceability criteria including jurisdiction, legal standing, and escalation triggers (CFT: escalate if transaction > £50,000 or 2+ jurisdictions).' },
+  { id: 4, section: 'Section 4', text: 'Enforcement Details — Apply the correct enforcement procedure for the case type (Common Law / Design Rights / Patents / TM PP/PDP / CFT). Document all actions using the 2026 standardised templates.' },
+  { id: 5, section: 'Final', text: 'Record outcome in Paragon — Update case status, attach all evidence, complete the enforcement annotation using the Auto-Annotations Builder, and mark case as "Under Review" or "Closed".' },
 ];
-const relatedSegments = ['NOI Appeals', 'NOI Complaints', 'Design Rights', 'Patents', 'Common Law', 'CFT'];
+const relatedSegments = ['Common Law', 'OID Validation', 'TM PP/PDP', 'CFT Cases', 'Design Rights', 'Patents', 'NOI Appeals', 'NOI Complaints'];
 
 function SmartSOPSearch() {
   const [query, setQuery] = useState('');
@@ -709,7 +718,10 @@ function SmartSOPSearch() {
                   </div>
                   <div className="flex items-start gap-3 flex-1">
                     <span className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white mt-0.5" style={{ background: completed[step.id] ? '#00a651' : '#0066cc' }}>{i+1}</span>
-                    <p className={`text-sm leading-relaxed ${completed[step.id] ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{step.text}</p>
+                    <div className="flex-1">
+                      {step.section && <div className="text-xs font-bold mb-0.5" style={{ color: '#0066cc' }}>{step.section}</div>}
+                      <p className={`text-sm leading-relaxed ${completed[step.id] ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{step.text}</p>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -824,6 +836,34 @@ function AutoAnnotations() {
 }
 
 function PlaceholderSection({ title, icon, desc }) {
+  if (title === 'SOP Library') {
+    return (
+      <section className="mb-8">
+        <div className="flex items-center gap-3 mb-4">
+          <h2 className="text-xl font-bold text-gray-800">SOP Library</h2>
+          <span className="text-sm text-gray-400">— NOI Investigation Standard Operating Procedures</span>
+        </div>
+        <div className="grid grid-cols-1 gap-4">
+          {NOI_SOP_SECTIONS.map((s, i) => (
+            <div key={s.key} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex items-start gap-4 card-hover">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ background: '#0066cc' }}>{i + 1}</div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-gray-800 text-sm mb-1">{s.title}</h3>
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {s.segments.map(seg => <span key={seg} className="px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700 font-medium">{seg}</span>)}
+                </div>
+                <a href={s.url} target="_blank" rel="noopener noreferrer"
+                  className="text-xs font-medium px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 text-white hover:opacity-90 transition-opacity"
+                  style={{ background: '#0066cc' }}>
+                  <span>🔗</span> Open in SharePoint
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="mb-8">
       <h2 className="text-xl font-bold text-gray-800 mb-4">{title}</h2>
@@ -905,8 +945,7 @@ function App() {
       case 'search': return <SmartSOPSearch />;
       case 'annotations': return <AutoAnnotations />;
       case 'analytics': return <PlaceholderSection title="Case Analytics" icon="📊" desc="Visual dashboards showing SOP adherence rates, case type distribution, and investigator performance metrics." />;
-      case 'preferences': return <PlaceholderSection title="Preferences" icon="⚙️" desc="Customise notification settings, default case type, annotation templates, and display preferences." />;
-      default: return <NewsflashSection items={newsflashItems} onAcknowledge={handleAcknowledge} />;
+      case 'preferences': return <PlaceholderSection title="Preferences" icon="⚙️" desc="Customise notification settings, default case type, annotation templates, and display preferences." />;      default: return <NewsflashSection items={newsflashItems} onAcknowledge={handleAcknowledge} />;
     }
   };
 
