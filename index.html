@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart SOP Guidance Engine</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            sidebar: '#1a2332', navbar: '#1e2d3d',
+            primary: '#0066cc', critical: '#ff4444',
+            warning: '#f5a623', success: '#00a651', important: '#f97316',
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8}
+    ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:#f1f1f1}::-webkit-scrollbar-thumb{background:#c1c1c1;border-radius:3px}
+    .sidebar-item{transition:background .15s}
+    .sidebar-item:hover{background:rgba(255,255,255,.08)}
+    .sidebar-item.active{background:rgba(0,102,204,.25);border-left:3px solid #0066cc}
+    .tab-btn.active{border-bottom:2px solid #0066cc;color:#60a5fa}
+    .card-hover{transition:box-shadow .2s,transform .2s}
+    .card-hover:hover{box-shadow:0 6px 24px rgba(0,0,0,.13);transform:translateY(-2px)}
+    .pulse{animation:pulse 2s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+    .diff-add{background:#dcfce7;color:#166534}
+    .diff-remove{background:#fee2e2;color:#991b1b}
+    .diff-context{background:#f8fafc;color:#64748b}
+    .modal-overlay{animation:fadeIn .15s ease}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    .modal-content{animation:slideUp .2s ease}
+    @keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+    .toast{animation:toastIn .3s ease}
+    @keyframes toastIn{from{opacity:0;transform:translateX(100%)}to{opacity:1;transform:translateX(0)}}
+    .ws-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+    .ws-connected{background:#00a651}
+    .ws-disconnected{background:#ff4444}
+    .ws-connecting{background:#f5a623;animation:pulse 1s infinite}
+    .step-row:hover{background:#f8faff}
+    .badge-critical{background:#ff4444;color:#fff}
+    .badge-important{background:#f97316;color:#fff}
+    .badge-awareness{background:#f5a623;color:#1a2332}
+    .badge-info{background:#0066cc;color:#fff}
+    .border-critical{border-left-color:#ff4444!important}
+    .border-important{border-left-color:#f97316!important}
+    .border-awareness{border-left-color:#f5a623!important}
+    .border-info{border-left-color:#0066cc!important}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+// ── MOCK DATA ─────────────────────────────────────────────────────────────────
+const MOCK_NEWSFLASH = [
+  {
+    newsflashId: 'nf-001', severity: 'CRITICAL',
+    title: 'Common Law Evidence Threshold Updated — Immediate Action Required',
+    description: 'The minimum evidence threshold for Common Law cases has been raised from 2 to 3 corroborating documents, effective immediately. All active cases opened before 15 May 2026 must be reassessed against the new criteria. Failure to comply may result in case invalidation.',
+    affectedSegments: ['Common Law', 'NOI Appeals'],
+    createdAt: '2026-05-15T09:00:00Z', deadline: '2026-05-16T09:00:00Z',
+    sopKey: 'common-law/Common_Law_SOP_v4.pdf',
+    beforeText: `Section 3.2 — Evidence Requirements\n\nInvestigators must obtain a minimum of TWO (2) corroborating documents before proceeding to the assessment stage. Acceptable documents include:\n- Witness statements\n- Medical records\n- Employment records\n- Photographic evidence`,
+    afterText: `Section 3.2 — Evidence Requirements\n\nInvestigators must obtain a minimum of THREE (3) corroborating documents before proceeding to the assessment stage. At least one document must be an official record (medical, employment, or legal). Acceptable documents include:\n- Witness statements (max 2 count toward minimum)\n- Medical records (official only)\n- Employment records\n- Photographic evidence\n- Legal correspondence`,
+    acknowledgments: { 'user-1': { acknowledgedAt: '2026-05-15T10:00:00Z', email: 'alice@noi.gov', role: 'INVESTIGATOR' }, 'user-2': { acknowledgedAt: '2026-05-15T11:00:00Z', email: 'bob@noi.gov', role: 'INVESTIGATOR' }, 'user-3': { acknowledgedAt: '2026-05-15T12:00:00Z', email: 'carol@noi.gov', role: 'INVESTIGATOR' } },
+    totalInvestigators: 10, ackCount: 3, ackPercent: 30,
+  },
+  {
+    newsflashId: 'nf-002', severity: 'IMPORTANT',
+    title: 'OID Validation — Digital Submission Portal Now Mandatory',
+    description: 'All OID validation submissions must now be made through the new digital portal. Paper submissions will no longer be accepted after 1 July 2026. Investigators must register on the portal before their next OID case.',
+    affectedSegments: ['OID Validation'],
+    createdAt: '2026-05-12T14:00:00Z', deadline: '2026-05-14T14:00:00Z',
+    sopKey: 'oid-validation/OID_Validation_SOP_v3.pdf',
+    beforeText: `Section 5.1 — Submission Methods\n\nOID validation submissions may be made via:\n1. Paper form (Form OID-22) submitted to the regional office\n2. Email to oid-submissions@noi.gov\n3. Digital portal (optional)`,
+    afterText: `Section 5.1 — Submission Methods\n\nAll OID validation submissions MUST be made via the digital portal at portal.noi.gov/oid. Paper and email submissions are no longer accepted as of 1 July 2026.\n\nPortal registration: Contact your team lead for access credentials.`,
+    acknowledgments: { 'user-1': { acknowledgedAt: '2026-05-12T15:00:00Z', email: 'alice@noi.gov', role: 'INVESTIGATOR' }, 'user-2': { acknowledgedAt: '2026-05-12T16:00:00Z', email: 'bob@noi.gov', role: 'INVESTIGATOR' }, 'user-3': { acknowledgedAt: '2026-05-12T17:00:00Z', email: 'carol@noi.gov', role: 'INVESTIGATOR' }, 'user-4': { acknowledgedAt: '2026-05-12T18:00:00Z', email: 'dave@noi.gov', role: 'INVESTIGATOR' }, 'user-5': { acknowledgedAt: '2026-05-13T09:00:00Z', email: 'eve@noi.gov', role: 'INVESTIGATOR' }, 'user-6': { acknowledgedAt: '2026-05-13T10:00:00Z', email: 'frank@noi.gov', role: 'INVESTIGATOR' } },
+    totalInvestigators: 10, ackCount: 6, ackPercent: 60,
+  },
+  {
+    newsflashId: 'nf-003', severity: 'AWARENESS',
+    title: 'CFT Case Escalation Criteria Revised',
+    description: 'Updated escalation thresholds for CFT cases now include financial transactions above £50,000 as an automatic escalation trigger. Previously the threshold was £100,000. Review the Before/After comparison to understand the full scope of changes.',
+    affectedSegments: ['CFT Cases', 'NOI Complaints'],
+    createdAt: '2026-05-10T10:00:00Z', deadline: '2026-05-17T10:00:00Z',
+    sopKey: 'cft-cases/CFT_Cases_SOP_v3.pdf',
+    beforeText: `Section 7.4 — Escalation Triggers\n\nCFT cases must be escalated to the Senior Investigations Team when:\n- Transaction value exceeds £100,000\n- Multiple jurisdictions involved (3+)\n- Suspected terrorist financing`,
+    afterText: `Section 7.4 — Escalation Triggers\n\nCFT cases must be escalated to the Senior Investigations Team when:\n- Transaction value exceeds £50,000 (reduced from £100,000)\n- Multiple jurisdictions involved (2+, reduced from 3)\n- Suspected terrorist financing\n- Politically Exposed Person (PEP) involvement`,
+    acknowledgments: { 'user-1': { acknowledgedAt: '2026-05-10T11:00:00Z', email: 'alice@noi.gov', role: 'INVESTIGATOR' }, 'user-2': { acknowledgedAt: '2026-05-10T12:00:00Z', email: 'bob@noi.gov', role: 'INVESTIGATOR' }, 'user-3': { acknowledgedAt: '2026-05-10T13:00:00Z', email: 'carol@noi.gov', role: 'INVESTIGATOR' }, 'user-4': { acknowledgedAt: '2026-05-10T14:00:00Z', email: 'dave@noi.gov', role: 'INVESTIGATOR' }, 'user-5': { acknowledgedAt: '2026-05-10T15:00:00Z', email: 'eve@noi.gov', role: 'INVESTIGATOR' }, 'user-6': { acknowledgedAt: '2026-05-10T16:00:00Z', email: 'frank@noi.gov', role: 'INVESTIGATOR' }, 'user-7': { acknowledgedAt: '2026-05-11T09:00:00Z', email: 'grace@noi.gov', role: 'INVESTIGATOR' }, 'user-8': { acknowledgedAt: '2026-05-11T10:00:00Z', email: 'henry@noi.gov', role: 'INVESTIGATOR' } },
+    totalInvestigators: 10, ackCount: 8, ackPercent: 80,
+  },
+  {
+    newsflashId: 'nf-004', severity: 'INFO',
+    title: 'TM PP/PDP — Updated Form Templates Available',
+    description: 'New standardised form templates for TM PP/PDP cases are now available in the document library. Use of the new templates is recommended but not mandatory until 1 August 2026.',
+    affectedSegments: ['TM PP/PDP'],
+    createdAt: '2026-05-08T09:00:00Z', deadline: '2026-06-08T09:00:00Z',
+    sopKey: 'tm-pp-pdp/TM_PP_PDP_SOP_v2.pdf',
+    beforeText: `Section 2.1 — Form Templates\n\nInvestigators may use any approved form template from the 2024 library.`,
+    afterText: `Section 2.1 — Form Templates\n\nInvestigators should use the 2026 standardised templates available in the document library. Legacy 2024 templates remain valid until 1 August 2026.`,
+    acknowledgments: { 'user-1': { acknowledgedAt: '2026-05-08T10:00:00Z', email: 'alice@noi.gov', role: 'INVESTIGATOR' } },
+    totalInvestigators: 10, ackCount: 1, ackPercent: 10,
+  },
+];
+
+const CURRENT_USER_ID = 'user-pp';
+const SEVERITY_ORDER = { CRITICAL: 0, IMPORTANT: 1, AWARENESS: 2, INFO: 3 };
+const SEVERITY_LABELS = { CRITICAL: 'CRITICAL', IMPORTANT: 'IMPORTANT', AWARENESS: 'AWARENESS', INFO: 'INFO' };
+const SEVERITY_DEADLINE_LABELS = { CRITICAL: '24 hours', IMPORTANT: '48 hours', AWARENESS: '1 week', INFO: '30 days' };
+
+// ── WEBSOCKET HOOK ────────────────────────────────────────────────────────────
+function useWebSocket(onMessage) {
+  const [wsStatus, setWsStatus] = useState('disconnected'); // connecting|connected|disconnected
+  const wsRef = useRef(null);
+  const reconnectTimer = useRef(null);
+
+  const connect = useCallback(() => {
+    // In production: const WS_URL = 'wss://your-api-id.execute-api.eu-west-1.amazonaws.com/prod';
+    // For demo, we simulate WebSocket with a mock that fires events
+    setWsStatus('connecting');
+    setTimeout(() => {
+      setWsStatus('connected');
+      // Simulate a new CRITICAL newsflash arriving after 8 seconds
+      setTimeout(() => {
+        onMessage({
+          type: 'NEW_NEWSFLASH',
+          newsflash: {
+            newsflashId: 'nf-live-001',
+            severity: 'CRITICAL',
+            title: '🔴 LIVE: Patents SOP — Examination Timeline Reduced',
+            description: 'Effective immediately, the examination timeline for patent cases has been reduced from 90 to 60 days. All pending cases must be reviewed.',
+            affectedSegments: ['Patents', 'Design Rights'],
+            createdAt: new Date().toISOString(),
+            deadline: new Date(Date.now() + 86400000).toISOString(),
+            acknowledgments: {}, totalInvestigators: 10, ackCount: 0, ackPercent: 0,
+            beforeText: 'Examination timeline: 90 days from filing date.',
+            afterText: 'Examination timeline: 60 days from filing date. Expedited review required for all pending cases.',
+          }
+        });
+      }, 8000);
+    }, 1200);
+  }, [onMessage]);
+
+  useEffect(() => { connect(); return () => { if (reconnectTimer.current) clearTimeout(reconnectTimer.current); }; }, []);
+
+  return wsStatus;
+}
+
+// ── TOAST SYSTEM ──────────────────────────────────────────────────────────────
+function ToastContainer({ toasts, removeToast }) {
+  return (
+    <div className="fixed top-16 right-4 z-50 flex flex-col gap-2" style={{ maxWidth: 360 }}>
+      {toasts.map(t => (
+        <div key={t.id} className={`toast flex items-start gap-3 p-4 rounded-xl shadow-2xl border text-sm ${
+          t.severity === 'CRITICAL' ? 'bg-red-50 border-red-200' :
+          t.severity === 'IMPORTANT' ? 'bg-orange-50 border-orange-200' :
+          t.severity === 'AWARENESS' ? 'bg-yellow-50 border-yellow-200' : 'bg-blue-50 border-blue-200'
+        }`}>
+          <span className="text-lg flex-shrink-0">{t.severity === 'CRITICAL' ? '🚨' : t.severity === 'IMPORTANT' ? '⚠️' : '📢'}</span>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-gray-800 text-xs mb-0.5">{t.severity} — SOP Update</div>
+            <div className="text-gray-600 text-xs leading-snug truncate">{t.title}</div>
+          </div>
+          <button onClick={() => removeToast(t.id)} className="text-gray-400 hover:text-gray-600 flex-shrink-0 text-base font-bold">×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── DIFF VIEWER ───────────────────────────────────────────────────────────────
+function DiffViewer({ before, after }) {
+  const beforeLines = (before || '').split('\n');
+  const afterLines = (after || '').split('\n');
+
+  // Simple line-by-line diff for display
+  const maxLen = Math.max(beforeLines.length, afterLines.length);
+  const pairs = Array.from({ length: maxLen }, (_, i) => ({
+    before: beforeLines[i] ?? null,
+    after: afterLines[i] ?? null,
+    changed: beforeLines[i] !== afterLines[i],
+  }));
+
+  return (
+    <div className="grid grid-cols-2 gap-0 text-xs font-mono rounded-xl overflow-hidden border border-gray-200">
+      <div className="border-r border-gray-200">
+        <div className="px-3 py-2 bg-red-50 border-b border-red-100 font-semibold text-red-600 text-xs uppercase tracking-wide flex items-center gap-2">
+          <span>−</span> Before
+        </div>
+        <div className="overflow-y-auto" style={{ maxHeight: 320 }}>
+          {pairs.map((p, i) => (
+            <div key={i} className={`px-3 py-0.5 leading-5 ${p.changed && p.before !== null ? 'diff-remove' : 'diff-context'}`}>
+              <span className="select-none text-gray-300 mr-2">{String(i + 1).padStart(3)}</span>
+              {p.before ?? ''}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="px-3 py-2 bg-green-50 border-b border-green-100 font-semibold text-green-600 text-xs uppercase tracking-wide flex items-center gap-2">
+          <span>+</span> After
+        </div>
+        <div className="overflow-y-auto" style={{ maxHeight: 320 }}>
+          {pairs.map((p, i) => (
+            <div key={i} className={`px-3 py-0.5 leading-5 ${p.changed && p.after !== null ? 'diff-add' : 'diff-context'}`}>
+              <span className="select-none text-gray-300 mr-2">{String(i + 1).padStart(3)}</span>
+              {p.after ?? ''}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── BEFORE/AFTER MODAL ────────────────────────────────────────────────────────
+function BeforeAfterModal({ item, onClose, onAcknowledge }) {
+  const [tab, setTab] = useState('diff');
+  const alreadyAcked = item.acknowledgments && CURRENT_USER_ID in item.acknowledgments;
+
+  return (
+    <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,.6)' }}>
+      <div className="modal-content bg-white rounded-2xl shadow-2xl w-full flex flex-col" style={{ maxWidth: 860, maxHeight: '90vh' }}>
+        {/* Header */}
+        <div className="flex items-start justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`badge-${item.severity.toLowerCase()} text-xs font-bold px-2.5 py-1 rounded-full`}>{item.severity}</span>
+              <span className="text-xs text-gray-400">{item.sopKey}</span>
+            </div>
+            <h3 className="font-bold text-gray-800 text-base leading-snug">{item.title}</h3>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl font-bold ml-4 flex-shrink-0 leading-none">×</button>
+        </div>
+        {/* Tabs */}
+        <div className="flex border-b border-gray-100 px-6 flex-shrink-0">
+          {['diff', 'before', 'after', 'details'].map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`px-4 py-2.5 text-xs font-semibold capitalize border-b-2 transition-colors ${tab === t ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              {t === 'diff' ? 'Side-by-Side Diff' : t === 'before' ? 'Before' : t === 'after' ? 'After' : 'Details'}
+            </button>
+          ))}
+        </div>
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {tab === 'diff' && <DiffViewer before={item.beforeText} after={item.afterText} />}
+          {tab === 'before' && <pre className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap bg-red-50 rounded-xl p-4 border border-red-100">{item.beforeText}</pre>}
+          {tab === 'after' && <pre className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap bg-green-50 rounded-xl p-4 border border-green-100">{item.afterText}</pre>}
+          {tab === 'details' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-50 rounded-xl p-4"><div className="text-xs text-gray-500 mb-1">Severity</div><div className="font-semibold text-gray-800">{item.severity}</div></div>
+                <div className="bg-gray-50 rounded-xl p-4"><div className="text-xs text-gray-500 mb-1">Deadline</div><div className="font-semibold text-gray-800">{item.deadline ? new Date(item.deadline).toLocaleString() : 'N/A'}</div></div>
+                <div className="bg-gray-50 rounded-xl p-4"><div className="text-xs text-gray-500 mb-1">SOP File</div><div className="font-semibold text-gray-800 text-xs break-all">{item.sopKey}</div></div>
+                <div className="bg-gray-50 rounded-xl p-4"><div className="text-xs text-gray-500 mb-1">Detected</div><div className="font-semibold text-gray-800">{item.createdAt ? new Date(item.createdAt).toLocaleString() : 'N/A'}</div></div>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-4"><div className="text-xs text-gray-500 mb-2">Affected Segments</div><div className="flex flex-wrap gap-2">{(item.affectedSegments || []).map(s => <span key={s} className="px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">{s}</span>)}</div></div>
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="text-xs text-gray-500 mb-2">Acknowledgment Progress — {item.ackCount}/{item.totalInvestigators}</div>
+                <div className="w-full bg-gray-200 rounded-full h-2 mb-2"><div className="h-2 rounded-full transition-all" style={{ width: `${item.ackPercent}%`, background: '#0066cc' }}></div></div>
+                <div className="text-xs text-gray-500">{item.ackPercent}% of team acknowledged</div>
+              </div>
+            </div>
+          )}
+        </div>
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between flex-shrink-0">
+          <div className="text-xs text-gray-500">Acknowledge within <strong>{SEVERITY_DEADLINE_LABELS[item.severity]}</strong> of detection</div>
+          <div className="flex gap-3">
+            <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Close</button>
+            <button
+              onClick={() => { onAcknowledge(item.newsflashId); onClose(); }}
+              disabled={alreadyAcked}
+              className={`px-5 py-2 rounded-lg text-sm font-semibold text-white transition-all ${alreadyAcked ? 'opacity-50 cursor-default' : 'hover:opacity-90'}`}
+              style={{ background: alreadyAcked ? '#00a651' : '#0066cc' }}
+            >
+              {alreadyAcked ? '✓ Acknowledged' : 'Acknowledge'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── NEWSFLASH CARD ────────────────────────────────────────────────────────────
+function NewsflashCard({ item, onAcknowledge, onViewDiff }) {
+  const alreadyAcked = item.acknowledgments && CURRENT_USER_ID in item.acknowledgments;
+  const isNew = !alreadyAcked;
+  const deadlineDate = item.deadline ? new Date(item.deadline) : null;
+  const now = new Date();
+  const isOverdue = deadlineDate && deadlineDate < now && !alreadyAcked;
+  const hoursLeft = deadlineDate ? Math.max(0, Math.round((deadlineDate - now) / 3600000)) : null;
+
+  const borderClass = `border-${item.severity.toLowerCase()}`;
+  const badgeClass = `badge-${item.severity.toLowerCase()}`;
+
+  return (
+    <div className={`card-hover bg-white rounded-xl border border-l-4 ${borderClass} p-5 flex flex-col gap-3 ${isOverdue ? 'ring-2 ring-red-200' : ''}`}>
+      {/* Top row */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`${badgeClass} text-xs font-bold px-2.5 py-1 rounded-full`}>{item.severity}</span>
+          {isNew && <span className="w-2 h-2 rounded-full flex-shrink-0 pulse" style={{ background: '#0066cc' }}></span>}
+          {isOverdue && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600">OVERDUE</span>}
+        </div>
+        <span className="text-xs text-gray-400 flex-shrink-0">{item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</span>
+      </div>
+
+      {/* Title + desc */}
+      <div>
+        <h3 className="font-semibold text-gray-800 text-sm leading-snug mb-1.5">{item.title}</h3>
+        <p className="text-xs text-gray-500 leading-relaxed line-clamp-3">{item.description}</p>
+      </div>
+
+      {/* Segments */}
+      <div className="flex flex-wrap gap-1.5">
+        {(item.affectedSegments || []).map(s => (
+          <span key={s} className="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600 font-medium">{s}</span>
+        ))}
+      </div>
+
+      {/* Deadline */}
+      {deadlineDate && (
+        <div className={`flex items-center gap-1.5 text-xs ${isOverdue ? 'text-red-500 font-semibold' : hoursLeft < 12 ? 'text-orange-500 font-medium' : 'text-gray-400'}`}>
+          <span>⏰</span>
+          {isOverdue ? 'Overdue — acknowledge immediately' : `${hoursLeft}h remaining to acknowledge`}
+        </div>
+      )}
+
+      {/* Progress mini-bar */}
+      <div>
+        <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+          <span>Team acknowledgment</span>
+          <span className="font-medium text-gray-600">{item.ackCount}/{item.totalInvestigators}</span>
+        </div>
+        <div className="w-full bg-gray-100 rounded-full h-1.5">
+          <div className="h-1.5 rounded-full transition-all duration-500" style={{ width: `${item.ackPercent}%`, background: item.ackPercent === 100 ? '#00a651' : '#0066cc' }}></div>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+        <button
+          onClick={() => onAcknowledge(item.newsflashId)}
+          disabled={alreadyAcked}
+          className={`flex-1 text-xs py-2 rounded-lg font-semibold transition-all flex items-center justify-center gap-1.5 ${alreadyAcked ? 'bg-green-50 text-green-600 cursor-default border border-green-200' : 'text-white hover:opacity-90'}`}
+          style={alreadyAcked ? {} : { background: '#0066cc' }}
+        >
+          {alreadyAcked ? '✓ Acknowledged' : '✓ Acknowledge'}
+        </button>
+        <button
+          onClick={() => onViewDiff(item)}
+          className="text-xs py-2 px-3 rounded-lg border border-blue-200 font-medium text-blue-600 hover:bg-blue-50 transition-colors flex items-center gap-1"
+        >
+          <span>⟷</span> Before/After
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── TEAM ACKNOWLEDGMENT TRACKER ───────────────────────────────────────────────
+function TeamAckTracker({ items }) {
+  const criticalItems = items.filter(i => i.severity === 'CRITICAL' && i.ackPercent < 100);
+  const displayItems = criticalItems.length > 0 ? criticalItems : items.filter(i => i.ackPercent < 100).slice(0, 3);
+
+  if (displayItems.length === 0) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 text-center">
+        <div className="text-2xl mb-2">🎉</div>
+        <div className="text-sm font-semibold text-green-600">All updates acknowledged!</div>
+        <div className="text-xs text-gray-400 mt-1">Your team is fully up to date.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div>
+          <h3 className="font-bold text-gray-800 text-sm">Team Acknowledgment Tracker</h3>
+          <p className="text-xs text-gray-500 mt-0.5">{displayItems.length} update{displayItems.length > 1 ? 's' : ''} pending team acknowledgment</p>
+        </div>
+        <button className="text-xs font-medium px-3 py-1.5 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors">Send Reminders</button>
+      </div>
+      <div className="divide-y divide-gray-50">
+        {displayItems.map(item => {
+          const acks = Object.values(item.acknowledgments || {});
+          const avatarColors = ['bg-blue-500','bg-green-500','bg-purple-500','bg-pink-500','bg-indigo-500'];
+          const pending = item.totalInvestigators - item.ackCount;
+          return (
+            <div key={item.newsflashId} className="px-5 py-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`badge-${item.severity.toLowerCase()} text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0`}>{item.severity}</span>
+                  <span className="text-xs font-medium text-gray-700 truncate">{item.title}</span>
+                </div>
+                <span className="text-xs font-bold ml-2 flex-shrink-0" style={{ color: item.ackPercent >= 75 ? '#00a651' : item.ackPercent >= 50 ? '#f5a623' : '#ff4444' }}>
+                  {item.ackCount}/{item.totalInvestigators}
+                </span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-2 mb-2">
+                <div className="h-2 rounded-full transition-all duration-700" style={{
+                  width: `${item.ackPercent}%`,
+                  background: item.ackPercent >= 75 ? '#00a651' : item.ackPercent >= 50 ? '#f5a623' : '#0066cc'
+                }}></div>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex -space-x-1.5">
+                  {acks.slice(0, 5).map((ack, i) => (
+                    <div key={i} className={`w-6 h-6 rounded-full ${avatarColors[i % avatarColors.length]} flex items-center justify-center text-white text-xs font-bold border-2 border-white`} title={ack.email}>
+                      {ack.email ? ack.email[0].toUpperCase() : '?'}
+                    </div>
+                  ))}
+                  {pending > 0 && (
+                    <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-xs font-bold border-2 border-white">+{pending}</div>
+                  )}
+                </div>
+                <span className="text-xs text-gray-400">Deadline: {item.deadline ? new Date(item.deadline).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'N/A'}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── NEWSFLASH SECTION ─────────────────────────────────────────────────────────
+function NewsflashSection({ items, onAcknowledge, onNewItem }) {
+  const [filter, setFilter] = useState('All');
+  const [diffItem, setDiffItem] = useState(null);
+  const filters = ['All', 'Critical', 'Important', 'Awareness', 'Info', 'Unread'];
+
+  const filtered = useMemo(() => {
+    let list = [...items].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || new Date(b.createdAt) - new Date(a.createdAt));
+    if (filter === 'Unread') return list.filter(i => !(CURRENT_USER_ID in (i.acknowledgments || {})));
+    if (filter !== 'All') return list.filter(i => i.severity === filter.toUpperCase());
+    return list;
+  }, [items, filter]);
+
+  const unreadCount = items.filter(i => !(CURRENT_USER_ID in (i.acknowledgments || {}))).length;
+
+  return (
+    <section className="mb-8">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h2 className="text-xl font-bold text-gray-800">Newsflash</h2>
+          <span className="text-sm text-gray-400">— Recent SOP Updates</span>
+          {unreadCount > 0 && (
+            <span className="px-2.5 py-0.5 rounded-full text-white text-xs font-bold" style={{ background: '#0066cc' }}>{unreadCount} New</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {filters.map(f => (
+            <button key={f} onClick={() => setFilter(f)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${filter === f ? 'text-white border-transparent' : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 bg-white'}`}
+              style={filter === f ? { background: '#0066cc' } : {}}>
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Cards grid */}
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-xl border border-dashed border-gray-200 p-12 text-center">
+          <div className="text-3xl mb-2">✅</div>
+          <p className="text-gray-500 text-sm">No updates match this filter</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-2">
+          {filtered.map(item => (
+            <NewsflashCard key={item.newsflashId} item={item} onAcknowledge={onAcknowledge} onViewDiff={setDiffItem} />
+          ))}
+        </div>
+      )}
+
+      {/* Team Tracker */}
+      <div className="mt-5">
+        <TeamAckTracker items={items} />
+      </div>
+
+      {/* Before/After Modal */}
+      {diffItem && (
+        <BeforeAfterModal item={diffItem} onClose={() => setDiffItem(null)} onAcknowledge={onAcknowledge} />
+      )}
+    </section>
+  );
+}
+
+// ── NOTIFICATION BELL ─────────────────────────────────────────────────────────
+function NotificationBell({ items, onAcknowledge }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const unread = items.filter(i => !(CURRENT_USER_ID in (i.acknowledgments || {})));
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const severityIcon = { CRITICAL: '🚨', IMPORTANT: '⚠️', AWARENESS: '📢', INFO: 'ℹ️' };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen(!open)} className="relative p-2 rounded-full hover:bg-white/10 transition-colors">
+        <span className="text-gray-300 text-xl">🔔</span>
+        {unread.length > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 min-w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold px-1 pulse" style={{ background: '#ff4444' }}>
+            {unread.length > 9 ? '9+' : unread.length}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-11 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <span className="font-bold text-gray-800 text-sm">Notifications</span>
+            <div className="flex items-center gap-2">
+              {unread.length > 0 && <span className="text-xs px-2 py-0.5 rounded-full text-white font-bold" style={{ background: '#ff4444' }}>{unread.length} unread</span>}
+            </div>
+          </div>
+          <div className="overflow-y-auto" style={{ maxHeight: 360 }}>
+            {unread.length === 0 ? (
+              <div className="px-4 py-8 text-center text-gray-400 text-sm">All caught up! ✅</div>
+            ) : (
+              unread.map(item => (
+                <div key={item.newsflashId} className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0">
+                  <div className="flex items-start gap-2">
+                    <span className="text-base flex-shrink-0 mt-0.5">{severityIcon[item.severity]}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className={`badge-${item.severity.toLowerCase()} text-xs font-bold px-1.5 py-0.5 rounded`}>{item.severity}</span>
+                      </div>
+                      <div className="text-xs font-semibold text-gray-800 leading-snug">{item.title}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ''}</div>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onAcknowledge(item.newsflashId); }}
+                      className="flex-shrink-0 text-xs px-2 py-1 rounded-lg font-medium text-white hover:opacity-90"
+                      style={{ background: '#0066cc' }}
+                    >Ack</button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          {unread.length > 0 && (
+            <div className="px-4 py-3 border-t border-gray-100">
+              <button onClick={() => { unread.forEach(i => onAcknowledge(i.newsflashId)); setOpen(false); }}
+                className="w-full text-xs py-2 rounded-lg font-semibold text-white hover:opacity-90"
+                style={{ background: '#0066cc' }}>
+                Acknowledge All ({unread.length})
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── SIDEBAR ───────────────────────────────────────────────────────────────────
+const navItems = [
+  { id: 'newsflash', label: 'Newsflash', icon: '📢' },
+  { id: 'search', label: 'Smart SOP Search', icon: '🔍' },
+  { id: 'annotations', label: 'Auto-Annotations', icon: '✏️' },
+  { id: 'analytics', label: 'Case Analytics', icon: '📊' },
+  { id: 'preferences', label: 'Preferences', icon: '⚙️' },
+];
+
+function Sidebar({ active, setActive, unreadCount }) {
+  return (
+    <div className="flex flex-col h-screen fixed left-0 top-0 z-20" style={{ width: 160, background: '#1a2332' }}>
+      <div className="px-4 py-5 border-b border-white/10">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ background: '#0066cc' }}>S</div>
+          <span className="text-white text-xs font-semibold leading-tight">Smart SOP<br/>Engine</span>
+        </div>
+      </div>
+      <nav className="flex-1 py-3 overflow-y-auto">
+        {navItems.map(item => (
+          <button key={item.id} onClick={() => setActive(item.id)}
+            className={`sidebar-item w-full text-left px-4 py-3 flex flex-col gap-0.5 relative ${active === item.id ? 'active' : ''}`}>
+            <span className="text-base">{item.icon}</span>
+            <span className={`text-xs leading-tight ${active === item.id ? 'text-blue-300 font-semibold' : 'text-gray-400'}`}>{item.label}</span>
+            {item.id === 'newsflash' && unreadCount > 0 && (
+              <span className="absolute top-2 right-2 min-w-4 h-4 rounded-full flex items-center justify-center text-white text-xs font-bold px-1" style={{ background: '#ff4444', fontSize: 9 }}>{unreadCount}</span>
+            )}
+          </button>
+        ))}
+      </nav>
+      <div className="px-3 py-4 border-t border-white/10">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ background: '#0066cc' }}>PP</div>
+          <div className="min-w-0">
+            <div className="text-white text-xs font-semibold truncate">Pittala Pavan</div>
+            <div className="text-xs truncate" style={{ color: '#f5a623' }}>Kumar</div>
+          </div>
+        </div>
+        <div className="mt-2">
+          <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: 'linear-gradient(135deg,#f5a623,#e8941a)', color: '#1a2332' }}>PRO</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── NAVBAR ────────────────────────────────────────────────────────────────────
+function Navbar({ activeTab, setActiveTab, newsflashItems, onAcknowledge, wsStatus }) {
+  const tabs = ['Dashboard', 'My Cases', 'SOP Library', 'Reports'];
+  const wsLabel = { connected: 'Live', connecting: 'Connecting...', disconnected: 'Offline' };
+  return (
+    <div className="fixed top-0 right-0 z-10 flex items-center justify-between px-6" style={{ left: 160, height: 56, background: '#1e2d3d' }}>
+      <div className="flex items-center gap-1">
+        {tabs.map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)}
+            className={`tab-btn px-4 py-1.5 text-sm font-medium rounded-t transition-colors ${activeTab === tab ? 'active text-blue-400' : 'text-gray-400 hover:text-gray-200'}`}>
+            {tab}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-3">
+        {/* WS status */}
+        <div className="flex items-center gap-1.5 text-xs text-gray-400">
+          <span className={`ws-dot ws-${wsStatus}`}></span>
+          <span>{wsLabel[wsStatus]}</span>
+        </div>
+        <NotificationBell items={newsflashItems} onAcknowledge={onAcknowledge} />
+        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold cursor-pointer" style={{ background: '#0066cc' }}>PP</div>
+      </div>
+    </div>
+  );
+}
+
+// ── SMART SOP SEARCH ──────────────────────────────────────────────────────────
+const sopSteps = [
+  { id: 1, text: 'Verify claimant identity using government-issued photo ID and proof of address (within 3 months).' },
+  { id: 2, text: 'Confirm case reference number matches the registered claim in the Paragon system.' },
+  { id: 3, text: 'Review submitted evidence against the updated Common Law evidence threshold (min. 3 corroborating documents).' },
+  { id: 4, text: 'Assess escalation criteria: fatality, serious injury, or systemic employer failure — escalate to Senior Investigations Team if any apply.' },
+  { id: 5, text: 'Document all findings in Paragon using the standardised annotation template and mark case status as "Under Review".' },
+];
+const relatedSegments = ['NOI Appeals', 'NOI Complaints', 'Design Rights', 'Patents', 'Common Law', 'CFT'];
+
+function SmartSOPSearch() {
+  const [query, setQuery] = useState('');
+  const [searched, setSearched] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [completed, setCompleted] = useState({});
+  const [activeSegment, setActiveSegment] = useState(null);
+  const completedCount = Object.values(completed).filter(Boolean).length;
+
+  const handleSearch = () => {
+    if (!query.trim()) return;
+    setLoading(true);
+    setTimeout(() => { setLoading(false); setSearched(true); }, 900);
+  };
+
+  return (
+    <section className="mb-8">
+      <div className="flex items-center gap-3 mb-4">
+        <h2 className="text-xl font-bold text-gray-800">Smart SOP Search</h2>
+        <span className="text-sm text-gray-400">— AI-Powered Guidance</span>
+      </div>
+      <div className="flex gap-3 mb-5">
+        <div className="flex-1 relative">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+          <input type="text" value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearch()}
+            placeholder="Type your case context... e.g. 'Common Law claimant identity verification'"
+            className="w-full pl-11 pr-4 py-3.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 shadow-sm" />
+        </div>
+        <button onClick={handleSearch} disabled={loading}
+          className="px-6 py-3.5 rounded-xl text-white font-semibold text-sm hover:opacity-90 flex items-center gap-2 shadow-sm disabled:opacity-60"
+          style={{ background: '#0066cc', minWidth: 110 }}>
+          {loading ? <span className="animate-spin inline-block">⟳</span> : '🔍'}
+          {loading ? 'Searching...' : 'Search'}
+        </button>
+      </div>
+      {searched && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <h3 className="font-bold text-gray-800">Step-by-Step Guidance</h3>
+                <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: '#e8f0fe', color: '#0066cc' }}>Common Law</span>
+              </div>
+              <span className="text-xs text-gray-500">{completedCount}/{sopSteps.length} completed</span>
+            </div>
+            <div className="h-1 bg-gray-100"><div className="h-1 transition-all duration-500" style={{ width: `${(completedCount/sopSteps.length)*100}%`, background: '#00a651' }}></div></div>
+            <div className="divide-y divide-gray-50">
+              {sopSteps.map((step, i) => (
+                <div key={step.id} className="step-row flex items-start gap-4 px-5 py-4 cursor-pointer" onClick={() => setCompleted(c => ({ ...c, [step.id]: !c[step.id] }))}>
+                  <div className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center mt-0.5 transition-all ${completed[step.id] ? 'border-green-500 bg-green-500' : 'border-gray-300'}`}>
+                    {completed[step.id] && <span className="text-white text-xs font-bold">✓</span>}
+                  </div>
+                  <div className="flex items-start gap-3 flex-1">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white mt-0.5" style={{ background: completed[step.id] ? '#00a651' : '#0066cc' }}>{i+1}</span>
+                    <p className={`text-sm leading-relaxed ${completed[step.id] ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{step.text}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-xl flex items-start gap-4 p-4" style={{ borderLeft: '4px solid #ff4444', background: '#fff5f5', border: '1px solid #fecaca', borderLeftWidth: 4 }}>
+            <span className="text-2xl flex-shrink-0">⚠️</span>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-bold px-2 py-0.5 rounded text-white" style={{ background: '#ff4444' }}>EXCEPTION</span>
+                <span className="text-sm font-semibold text-red-700">Evidence Threshold Change — Immediate Action Required</span>
+              </div>
+              <p className="text-xs text-red-600 leading-relaxed">The Common Law evidence threshold was updated on 15 May 2026. Cases opened before this date must be reassessed. Minimum 3 corroborating documents now required (previously 2).</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">Related SOP Segments</h4>
+            <div className="flex flex-wrap gap-2">
+              {relatedSegments.map(seg => (
+                <button key={seg} onClick={() => setActiveSegment(activeSegment === seg ? null : seg)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${activeSegment === seg ? 'text-white border-transparent' : 'text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600'}`}
+                  style={activeSegment === seg ? { background: '#0066cc' } : {}}>
+                  {seg}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {!searched && (
+        <div className="bg-white rounded-xl border border-dashed border-gray-200 p-12 text-center">
+          <div className="text-4xl mb-3">🔍</div>
+          <p className="text-gray-500 text-sm">Enter your case context above to get AI-powered SOP guidance</p>
+          <p className="text-gray-400 text-xs mt-1">Supports Common Law, OID Validation, TM PP/PDP, and CFT Cases</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ── AUTO-ANNOTATIONS ──────────────────────────────────────────────────────────
+const annotationActions = [
+  { id: 'identity', label: 'Identity Verified', text: 'Claimant identity verified via government-issued photo ID (Passport #XXXXXXX) and proof of address dated [DATE].' },
+  { id: 'evidence', label: 'Evidence Reviewed', text: 'Evidence package reviewed. [N] corroborating documents assessed against updated Common Law threshold (min. 3). All documents meet minimum requirements.' },
+  { id: 'escalation', label: 'Escalation Assessment', text: 'Escalation criteria assessed. No fatality, serious injury, or systemic employer failure identified. Case continues standard processing.' },
+  { id: 'paragon', label: 'Paragon Updated', text: 'Case status updated to "Under Review" in Paragon. All findings documented per standardised annotation template.' },
+  { id: 'next', label: 'Next Action Noted', text: 'Next action: Schedule claimant interview within 5 business days. Assigned to [INVESTIGATOR NAME].' },
+];
+
+function AutoAnnotations() {
+  const [selected, setSelected] = useState({ identity: true, evidence: true });
+  const [copied, setCopied] = useState(false);
+  const [pasted, setPasted] = useState(false);
+  const generatedText = annotationActions.filter(a => selected[a.id]).map((a, i) => `${i+1}. ${a.text}`).join('\n\n');
+  const selectedCount = Object.values(selected).filter(Boolean).length;
+
+  return (
+    <section className="mb-8">
+      <div className="flex items-center gap-3 mb-4">
+        <h2 className="text-xl font-bold text-gray-800">Auto-Annotations Builder</h2>
+        <span className="text-sm text-gray-400">— Generate Paragon Annotations</span>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h3 className="font-semibold text-gray-800 text-sm">Select Actions</h3>
+            <span className="text-xs text-gray-500">{selectedCount} selected</span>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {annotationActions.map(action => (
+              <label key={action.id} className="flex items-start gap-4 px-5 py-4 cursor-pointer hover:bg-gray-50 transition-colors">
+                <input type="checkbox" checked={!!selected[action.id]} onChange={() => setSelected(s => ({ ...s, [action.id]: !s[action.id] }))}
+                  className="w-4 h-4 rounded cursor-pointer mt-0.5 flex-shrink-0" style={{ accentColor: '#0066cc' }} />
+                <div>
+                  <div className="text-sm font-medium text-gray-800">{action.label}</div>
+                  <div className="text-xs text-gray-500 mt-0.5 leading-relaxed">{action.text.substring(0, 80)}...</div>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h3 className="font-semibold text-gray-800 text-sm">Generated Annotation</h3>
+            <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: '#00a651' }}></span><span className="text-xs text-gray-500">Auto-generated</span></div>
+          </div>
+          <div className="flex-1 p-5">
+            {generatedText ? (
+              <pre className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-sans bg-gray-50 rounded-lg p-4 min-h-48 border border-gray-100">{generatedText}</pre>
+            ) : (
+              <div className="flex items-center justify-center min-h-48 text-gray-400 text-sm">Select actions on the left to generate annotation text</div>
+            )}
+          </div>
+          <div className="px-5 py-4 border-t border-gray-100 flex gap-3">
+            <button onClick={() => { navigator.clipboard.writeText(generatedText).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),2000); }}
+              disabled={!generatedText}
+              className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition-all flex items-center justify-center gap-2 disabled:opacity-40 hover:opacity-90"
+              style={{ background: copied ? '#00a651' : '#0066cc' }}>
+              {copied ? '✓ Copied!' : '📋 Copy to Clipboard'}
+            </button>
+            <button onClick={() => { setPasted(true); setTimeout(()=>setPasted(false),2000); }}
+              disabled={!generatedText}
+              className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition-all flex items-center justify-center gap-2 disabled:opacity-40 hover:opacity-90"
+              style={{ background: pasted ? '#0066cc' : '#00a651' }}>
+              {pasted ? '✓ Sent!' : '📤 Paste in Paragon'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PlaceholderSection({ title, icon, desc }) {
+  return (
+    <section className="mb-8">
+      <h2 className="text-xl font-bold text-gray-800 mb-4">{title}</h2>
+      <div className="bg-white rounded-xl border border-dashed border-gray-200 p-16 text-center">
+        <div className="text-5xl mb-4">{icon}</div>
+        <h3 className="text-gray-600 font-semibold mb-2">{title}</h3>
+        <p className="text-gray-400 text-sm">{desc}</p>
+        <button className="mt-4 px-5 py-2 rounded-lg text-sm font-medium text-white" style={{ background: '#0066cc' }}>Coming Soon</button>
+      </div>
+    </section>
+  );
+}
+
+// ── ROOT APP ──────────────────────────────────────────────────────────────────
+function App() {
+  const [activeNav, setActiveNav] = useState('newsflash');
+  const [activeTab, setActiveTab] = useState('Dashboard');
+  const [newsflashItems, setNewsflashItems] = useState(MOCK_NEWSFLASH);
+  const [toasts, setToasts] = useState([]);
+
+  const addToast = useCallback((item) => {
+    const id = Date.now();
+    setToasts(t => [...t, { id, ...item }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 6000);
+  }, []);
+
+  const removeToast = useCallback((id) => setToasts(t => t.filter(x => x.id !== id)), []);
+
+  // WebSocket message handler
+  const handleWsMessage = useCallback((msg) => {
+    if (msg.type === 'NEW_NEWSFLASH') {
+      const nf = msg.newsflash;
+      setNewsflashItems(prev => {
+        if (prev.find(i => i.newsflashId === nf.newsflashId)) return prev;
+        return [nf, ...prev];
+      });
+      addToast({ severity: nf.severity, title: nf.title });
+      // Browser push for CRITICAL
+      if (nf.severity === 'CRITICAL' && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification(`🚨 CRITICAL SOP Update`, { body: nf.title, icon: '/favicon.ico' });
+      }
+    }
+    if (msg.type === 'ACK_UPDATE') {
+      setNewsflashItems(prev => prev.map(i =>
+        i.newsflashId === msg.newsflashId
+          ? { ...i, ackCount: msg.ackCount, ackPercent: msg.ackPercent }
+          : i
+      ));
+    }
+  }, [addToast]);
+
+  const wsStatus = useWebSocket(handleWsMessage);
+
+  // Acknowledge handler
+  const handleAcknowledge = useCallback((newsflashId) => {
+    setNewsflashItems(prev => prev.map(item => {
+      if (item.newsflashId !== newsflashId) return item;
+      if (CURRENT_USER_ID in (item.acknowledgments || {})) return item;
+      const newAcks = { ...item.acknowledgments, [CURRENT_USER_ID]: { acknowledgedAt: new Date().toISOString(), email: 'pavan@noi.gov', role: 'INVESTIGATOR' } };
+      const ackCount = Object.keys(newAcks).length;
+      const ackPercent = Math.round((ackCount / item.totalInvestigators) * 100);
+      return { ...item, acknowledgments: newAcks, ackCount, ackPercent };
+    }));
+    // In production: POST /newsflash/{id}/acknowledge
+  }, []);
+
+  // Request browser notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  const unreadCount = newsflashItems.filter(i => !(CURRENT_USER_ID in (i.acknowledgments || {}))).length;
+
+  const renderContent = () => {
+    switch (activeNav) {
+      case 'newsflash': return <NewsflashSection items={newsflashItems} onAcknowledge={handleAcknowledge} />;
+      case 'search': return <SmartSOPSearch />;
+      case 'annotations': return <AutoAnnotations />;
+      case 'analytics': return <PlaceholderSection title="Case Analytics" icon="📊" desc="Visual dashboards showing SOP adherence rates, case type distribution, and investigator performance metrics." />;
+      case 'preferences': return <PlaceholderSection title="Preferences" icon="⚙️" desc="Customise notification settings, default case type, annotation templates, and display preferences." />;
+      default: return <NewsflashSection items={newsflashItems} onAcknowledge={handleAcknowledge} />;
+    }
+  };
+
+  return (
+    <div className="min-h-screen" style={{ background: '#f0f4f8' }}>
+      <Sidebar active={activeNav} setActive={setActiveNav} unreadCount={unreadCount} />
+      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} newsflashItems={newsflashItems} onAcknowledge={handleAcknowledge} wsStatus={wsStatus} />
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
+      <main className="overflow-y-auto" style={{ marginLeft: 160, marginTop: 56, minHeight: 'calc(100vh - 56px)' }}>
+        <div className="max-w-6xl mx-auto px-6 py-6">
+          <div className="flex items-center gap-2 text-xs text-gray-400 mb-5">
+            <span>{activeTab}</span><span>›</span>
+            <span className="text-gray-600 font-medium">{navItems.find(n => n.id === activeNav)?.label}</span>
+          </div>
+          {renderContent()}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
